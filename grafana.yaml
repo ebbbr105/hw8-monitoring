@@ -1,0 +1,50 @@
+# Grafana alert rule (сохранить как alert_rules.yaml для Prometheus)
+# Также задаёт алерт прямо внутри Grafana через Alerting > Alert rules
+
+groups:
+  - name: ml_service_alerts
+    interval: 1m
+    rules:
+      - alert: HighLatencyP95
+        # SLO нарушен: p95 latency превышает 1 секунду
+        expr: >
+          histogram_quantile(0.95,
+            sum(rate(request_latency_seconds_bucket[5m])) by (le)
+          ) > 1
+        for: 2m
+        labels:
+          severity: warning
+          team: sre
+        annotations:
+          summary: 'SLO нарушен: высокая задержка ML-сервиса'
+          description: 'p95 latency > 1s уже 2 минуты. Текущее значение: {{ $value | humanizeDuration }}'
+          runbook_url: 'https://wiki.internal/runbooks/high-latency'
+
+      - alert: HighErrorRate
+        expr: >
+          sum(rate(http_requests_total{status=~'5..'}[5m]))
+          /
+          sum(rate(http_requests_total[5m])) > 0.01
+        for: 1m
+        labels:
+          severity: critical
+          team: sre
+        annotations:
+          summary: 'Error rate > 1%'
+          description: 'Доля 5xx ошибок: {{ $value | humanizePercentage }}'
+
+# ---
+# Дашборд Grafana (PromQL-запросы для панелей):
+#
+# Panel 1 — p95 Latency:
+#   histogram_quantile(0.95, sum(rate(request_latency_seconds_bucket[5m])) by (le))
+#
+# Panel 2 — RPS:
+#   sum(rate(http_requests_total[1m]))
+#
+# Panel 3 — Error rate:
+#   sum(rate(http_requests_total{status=~'5..'}[5m])) / sum(rate(http_requests_total[5m]))
+#
+# Panel 4 — p50 / p99 Latency (для сравнения хвоста):
+#   histogram_quantile(0.50, sum(rate(request_latency_seconds_bucket[5m])) by (le))
+#   histogram_quantile(0.99, sum(rate(request_latency_seconds_bucket[5m])) by (le))
